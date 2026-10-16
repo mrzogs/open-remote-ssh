@@ -26,6 +26,8 @@ SERVER_PLATFORM="%%SERVER_PLATFORM%%"
 SERVER_ARCH="%%SERVER_ARCH%%"
 SERVER_CONNECTION_TOKEN=
 SERVER_DOWNLOAD_URL=
+SERVER_LOCAL_ARCHIVE_PATH=%%SERVER_LOCAL_ARCHIVE_PATH%%
+REMOVE_SERVER_LOCAL_ARCHIVE=%%REMOVE_SERVER_LOCAL_ARCHIVE%%
 SERVER_VALIDATION_FLAG="%%SERVER_VALIDATION_FLAG%%"
 
 LISTENING_ON=
@@ -163,7 +165,9 @@ if [[ ! -f $SERVER_SCRIPT ]]; then
 
   pushd "$SERVER_DIR" > /dev/null || exit
 
-  if command -v wget >/dev/null 2>&1; then
+  if [[ -n "$SERVER_LOCAL_ARCHIVE_PATH" && -f "$SERVER_LOCAL_ARCHIVE_PATH" ]]; then
+    cp "$SERVER_LOCAL_ARCHIVE_PATH" vscode-server.tar.gz
+  elif command -v wget >/dev/null 2>&1; then
     wget --tries=3 --timeout=10 --continue --no-verbose -O vscode-server.tar.gz "$SERVER_DOWNLOAD_URL"
   elif command -v curl >/dev/null 2>&1; then
     curl --retry 3 --connect-timeout 10 --location --show-error --silent --output vscode-server.tar.gz "$SERVER_DOWNLOAD_URL"
@@ -214,6 +218,10 @@ if [[ ! -f $SERVER_SCRIPT ]]; then
   fi
 else
   echo "Server script already installed in $SERVER_SCRIPT"
+fi
+
+if [[ "$REMOVE_SERVER_LOCAL_ARCHIVE" = "true" && -n "$SERVER_LOCAL_ARCHIVE_PATH" ]]; then
+  rm -f "$SERVER_LOCAL_ARCHIVE_PATH"
 fi
 
 # Modify the commit in the remote server to match the local value

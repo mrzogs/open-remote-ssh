@@ -18,6 +18,7 @@ const KILL_GRACE_PERIOD = 2000;
 /** Cap on the stderr text kept around for error messages. */
 const MAX_STDERR_LENGTH = 8 * 1024;
 const SSH_CLIENT = 'ssh';
+const SCP_CLIENT = 'scp';
 
 /**
  * `GSSAPIAuthentication yes` values per ssh_config(5). When a host requests
@@ -126,6 +127,15 @@ function buildForwardArgs(config: NativeSSHConnectConfig, controlPath: string | 
 /** Args for the `-O check` probe that reports master liveness. */
 function buildCheckArgs(config: NativeSSHConnectConfig, controlPath: string): string[] {
     return [...buildSshOptions(config, controlPath), '-O', 'check', '--', config.destination];
+}
+
+function buildScpArgs(config: NativeSSHConnectConfig, controlPath: string | undefined, localPath: string, remotePath: string): string[] {
+    const args = [...buildSshOptions(config, controlPath)];
+    if (config.port !== undefined) {
+        args.push('-P', String(config.port));
+    }
+    args.push('--', localPath, `${config.destination}:${remotePath}`);
+    return args;
 }
 
 /** Trims collected stderr for display, keeping the tail where the reason lives. */
@@ -397,6 +407,25 @@ export default class NativeSSHConnection implements SSHClient {
             });
             child.on('error', reject);
             child.on('close', () => finish({ stdout, stderr }));
+        });
+    }
+
+    async uploadFile(localPath: string, remotePath: string): Promise<void> {
+        const args = buildScpArgs(this.config, this.controlPath, localPath, remotePath);
+        this.logger.trace(`scp upload: ${SCP_CLIENT} ${args.join(' ')}`);
+
+        return new Promise((resolve, reject) => {
+            const child = spawn(SCP_CLIENT, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+            let stderr = '';
+            child.stderr!.on('data', chunk => { stderr = capStderr(stderr + chunk.toString()); });
+            child.on('error', reject);
+            child.on('close', code => {
+                if (code !== 0) {
+                    reject(new Error(`scp upload failed for ${this.config.destination}: ${stderr.trim() || `exit code ${code}`}`));
+                    return;
+                }
+                resolve();
+            });
         });
     }
 

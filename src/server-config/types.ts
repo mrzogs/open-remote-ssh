@@ -9,5 +9,6 @@ export type IServerConfig = {
     serverApplicationName: string;
     serverDataFolderName: string;
     serverDownloadUrlTemplate?: string;
+    serverLocalArchivePathTemplate?: string;
     serverValidation: ServerValidation;
 };

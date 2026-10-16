@@ -26,6 +26,8 @@ export interface SSHClient {
     exec(cmd: string, params?: string[]): Promise<{ stdout: string; stderr: string }>;
     /** Run a command and resolve as soon as `tester` matches the streamed output. */
     execPartial(cmd: string, tester: (stdout: string, stderr: string) => boolean, params?: string[]): Promise<{ stdout: string; stderr: string }>;
+    /** Upload one local file to an exact remote path over the authenticated connection. */
+    uploadFile(localPath: string, remotePath: string): Promise<void>;
     /** Start a long-lived command and expose its output stream as a channel. */
     execChannel(cmd: string): Promise<SSHExecChannel>;
     /** Open a forwarding tunnel, reusing an existing one when `name` matches. */

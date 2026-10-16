@@ -1,5 +1,6 @@
 import type { IServerConfig, ServerValidation } from './types';
 
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { getProductJson } from './get-product-json';
 
@@ -8,6 +9,7 @@ export async function getServerConfig(): Promise<IServerConfig> {
 
     const customServerBinaryName = vscode.workspace.getConfiguration('remote.SSH').get<string>('serverBinaryName', '');
     const serverValidation = vscode.workspace.getConfiguration('remote.SSH').get<ServerValidation>('serverValidation', 'strict');
+    const localArchivePath = productJson.serverLocalArchivePath as string | undefined;
 
     return {
         version: vscode.version.replace('-insider',''),
@@ -17,6 +19,9 @@ export async function getServerConfig(): Promise<IServerConfig> {
         serverApplicationName: customServerBinaryName || productJson.serverApplicationName as string,
         serverDataFolderName: productJson.serverDataFolderName as string,
         serverDownloadUrlTemplate: productJson.serverDownloadUrlTemplate as string,
+        serverLocalArchivePathTemplate: localArchivePath
+            ? path.resolve(vscode.env.appRoot, localArchivePath)
+            : undefined,
         serverValidation,
     };
 }

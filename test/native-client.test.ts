@@ -298,6 +298,39 @@ describe('NativeSSHConnection', () => {
         expect(result.stdout).toContain('script-id: end');
     });
 
+    it('uploads a local server archive with scp', async () => {
+        mockSpawn(() => {
+            const scp = new FakeChildProcess();
+            queueMicrotask(() => scp.simulateExit(0));
+            return scp;
+        });
+
+        const connection = new NativeSSHConnection({ ...baseConfig, port: 2222 });
+        await connection.uploadFile('C:\\Agnostic AI\\server.tar.gz', '/tmp/server.tar.gz');
+
+        expect(spawnMock.mock.calls[0][0]).toBe('scp');
+        expect(spawnMock.mock.calls[0][1]).toEqual([
+            '-F', '/tmp/test-ssh-config',
+            '-o', 'BatchMode=yes',
+            '-P', '2222',
+            '--', 'C:\\Agnostic AI\\server.tar.gz', 'k8s-dev:/tmp/server.tar.gz'
+        ]);
+    });
+
+    it('reports scp upload failures', async () => {
+        mockSpawn(() => {
+            const scp = new FakeChildProcess();
+            queueMicrotask(() => {
+                scp.simulateStderr('disk full');
+                scp.simulateExit(1);
+            });
+            return scp;
+        });
+
+        const connection = new NativeSSHConnection(baseConfig);
+        await expect(connection.uploadFile('server.tar.gz', '/tmp/server.tar.gz')).rejects.toThrow('disk full');
+    });
+
     it('opens an -L tunnel and closes it again', async () => {
         await withLocalListener(async listenerPort => {
             let forwardChild: FakeChildProcess | undefined;

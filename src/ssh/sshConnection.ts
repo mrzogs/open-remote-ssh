@@ -170,6 +170,27 @@ export default class SSHConnection extends EventEmitter {
         });
     }
 
+    uploadFile(localPath: string, remotePath: string): Promise<void> {
+        return this.connect().then(() => {
+            return new Promise<void>((resolve, reject) => {
+                this.sshConnection!.sftp((sftpError, sftp) => {
+                    if (sftpError) {
+                        reject(sftpError);
+                        return;
+                    }
+                    sftp.fastPut(localPath, remotePath, (uploadError) => {
+                        sftp.end();
+                        if (uploadError) {
+                            reject(uploadError);
+                            return;
+                        }
+                        resolve();
+                    });
+                });
+            });
+        });
+    }
+
     /**
      * Forward out
      */

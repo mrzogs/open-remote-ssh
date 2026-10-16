@@ -90,6 +90,8 @@ export type ServerInstallOptions = {
     serverApplicationName: string;
     serverDataFolderName: string;
     serverDownloadUrlTemplate: string;
+    serverLocalArchivePath?: string;
+    removeServerLocalArchive: boolean;
     customInstallPath?: string;
     serverValidation: ServerValidation;
     serverPlatform: Platform;
@@ -115,6 +117,10 @@ export class ServerInstallError extends Error {
 }
 
 const DEFAULT_DOWNLOAD_URL_TEMPLATE = 'https://github.com/VSCodium/vscodium/releases/download/${version}.${release}/vscodium-reh-${os}-${arch}-${version}.${release}.tar.gz';
+
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 export type Platform = 'alpine' | 'darwin' | 'dragonfly' | 'freebsd' | 'linux' | 'windows';
 export type Architecture = 'arm64' | 'armhf' | 'loong64' | 'ppc64le' | 'riscv64' | 's390x' | 'x64';
@@ -245,6 +251,20 @@ export async function installCodeServer(
 
     const vscodeServerConfig = await getServerConfig();
 
+    let serverLocalArchivePath: string | undefined;
+    if (detectedPlatform !== 'windows' && vscodeServerConfig.serverLocalArchivePathTemplate) {
+        const localArchivePath = vscodeServerConfig.serverLocalArchivePathTemplate
+            .replace(/\$\{os\}/g, detectedPlatform)
+            .replace(/\$\{arch\}/g, detectedArch);
+        if (fs.existsSync(localArchivePath)) {
+            serverLocalArchivePath = `/tmp/agnostic-ai-server-${scriptId}.tar.gz`;
+            logger.trace(`Uploading bundled server archive for ${detectedPlatform}-${detectedArch}`);
+            await conn.uploadFile(localArchivePath, serverLocalArchivePath);
+        } else {
+            logger.trace(`Bundled server archive not found for ${detectedPlatform}-${detectedArch}`);
+        }
+    }
+
     // Get the version and release
     const serverDownloadUrlTemplateFinal = serverDownloadUrlTemplate || vscodeServerConfig.serverDownloadUrlTemplate || DEFAULT_DOWNLOAD_URL_TEMPLATE;
     const bestRelease: IRelease = await fetchRelease(serverDownloadUrlTemplateFinal, vscodeServerConfig.version, vscodeServerConfig.release, serverVersion, logger);
@@ -262,6 +282,8 @@ export async function installCodeServer(
         serverApplicationName: vscodeServerConfig.serverApplicationName,
         serverDataFolderName: vscodeServerConfig.serverDataFolderName,
         serverDownloadUrlTemplate: serverDownloadUrlTemplateFinal,
+        serverLocalArchivePath,
+        removeServerLocalArchive: !!serverLocalArchivePath,
         customInstallPath,
         serverValidation: vscodeServerConfig.serverValidation,
         serverPlatform: detectedPlatform,
@@ -409,7 +431,7 @@ function parseServerInstallOutput(str: string, scriptId: string): { [k: string]:
     return resultMap;
 }
 
-function generateBashInstallScript({ id, quality, version, commit, release, extensionIds, envVariables, sendEnvVars, useSocketPath, serverApplicationName, serverDataFolderName, serverDownloadUrlTemplate, customInstallPath, serverValidation, serverPlatform, serverArch }: ServerInstallOptions, extensionPath: string): string {
+function generateBashInstallScript({ id, quality, version, commit, release, extensionIds, envVariables, sendEnvVars, useSocketPath, serverApplicationName, serverDataFolderName, serverDownloadUrlTemplate, serverLocalArchivePath, removeServerLocalArchive, customInstallPath, serverValidation, serverPlatform, serverArch }: ServerInstallOptions, extensionPath: string): string {
     const extensions = extensionIds.map(extId => '--install-extension ' + extId).join(' ');
     const serverDataDir = customInstallPath
         ? customInstallPath.replace(/^~(?=\/|$)/, '$HOME')
@@ -432,6 +454,8 @@ function generateBashInstallScript({ id, quality, version, commit, release, exte
         SERVER_DATA_DIR_FLAG: customInstallPath ? '--server-data-dir="$SERVER_DATA_DIR"' : '',
         SERVER_VALIDATION_FLAG: serverValidation === 'skip' ? '--disable-client-validation' : '',
         SERVER_DOWNLOAD_URL_TEMPLATE: serverDownloadUrlTemplate.replace(/\$\{/g, '\\${'),
+        SERVER_LOCAL_ARCHIVE_PATH: shellQuote(serverLocalArchivePath ?? ''),
+        REMOVE_SERVER_LOCAL_ARCHIVE: removeServerLocalArchive ? 'true' : 'false',
         SCRIPT_ID: id,
         ENV_VAR_LINES: envVarLines,
         SEND_ENV_VAR_LINES: sendEnvVarLines,
